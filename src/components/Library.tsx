@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, FileText, Check, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { ModulePlayer } from './ModulePlayer';
 import { RegionModule } from './RegionModule';
+import { SpeciesIndexNew } from './SpeciesIndexNew';
 
 interface Taxon {
   id: string;
@@ -25,7 +26,7 @@ interface GlossaryTerm {
 }
 
 export function Library() {
-  const [activeTab, setActiveTab] = useState<'modules' | 'glossary'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'glossary' | 'species'>('modules');
   const [searchQuery, setSearchQuery] = useState('');
   const [taxa, setTaxa] = useState<Taxon[]>([]);
   const [moduleProgress, setModuleProgress] = useState<ModuleProgress>({ step1: 0, step2: 0, step3: 0 });
@@ -270,6 +271,26 @@ export function Library() {
                 />
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('species')}
+              className="relative font-semibold transition-colors flex-shrink-0 pb-3 pt-4"
+              style={{
+                fontSize: '15px',
+                color: activeTab === 'species' ? '#D2110C' : 'rgba(255, 255, 255, 0.6)'
+              }}
+            >
+              Species Index
+              {activeTab === 'species' && (
+                <div 
+                  className="absolute bottom-0 left-0 right-0 transition-all duration-200"
+                  style={{ 
+                    height: '3px', 
+                    background: '#D2110C',
+                    borderRadius: '3px 3px 0 0'
+                  }} 
+                />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -477,6 +498,11 @@ export function Library() {
               />
             ))}
           </div>
+        )}
+
+        {/* Species Tab */}
+        {activeTab === 'species' && (
+          <SpeciesIndexNew />
         )}
       </div>
 

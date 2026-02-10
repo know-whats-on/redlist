@@ -1,409 +1,953 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Download, X, Star, FileText, Check, Upload } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Download, Trash2, Search as SearchIcon, X, Copy, Check, Database, RefreshCw } from 'lucide-react';
+import { taxonomyDb, TaxonRecord } from '../lib/taxonomyDb';
+import { taxonomyPackSync, PackInfo, SyncProgress } from '../lib/taxonomyPackSync';
+import { taxonomySearch, SearchResult } from '../lib/taxonomySearch';
 
-interface SpeciesIndexProps {
-  selectedSpecies: string | null;
-  onSelectSpecies: (species: string | null) => void;
-  onCreateAssessment: (scientificName: string, commonName: string) => void;
+// Define explicit pack structure
+interface PackCard {
+  packId: string;
+  name: string;
+  description: string;
 }
 
-interface Species {
-  id: string;
-  scientificName: string;
-  authorship?: string;
-  commonName?: string;
-  rank: string;
-  family?: string;
-  order?: string;
-  class?: string;
-  kingdom: string;
-  synonyms?: string[];
-  pack: string;
+interface PhylumGroup {
+  phylum: string;
+  displayName: string;
+  packs: PackCard[];
 }
 
-// Starter Pack - ~50 sample species (would be 2000 in production)
-const starterPack: Species[] = [
-  { id: '1', scientificName: 'Sialia currucoides', authorship: '(Bechstein, 1798)', commonName: 'Mountain Bluebird', rank: 'species', family: 'Turdidae', order: 'Passeriformes', class: 'Aves', kingdom: 'Animalia', pack: 'starter' },
-  { id: '2', scientificName: 'Ursus maritimus', authorship: 'Phipps, 1774', commonName: 'Polar Bear', rank: 'species', family: 'Ursidae', order: 'Carnivora', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '3', scientificName: 'Panthera leo', authorship: '(Linnaeus, 1758)', commonName: 'Lion', rank: 'species', family: 'Felidae', order: 'Carnivora', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '4', scientificName: 'Elephas maximus', authorship: 'Linnaeus, 1758', commonName: 'Asian Elephant', rank: 'species', family: 'Elephantidae', order: 'Proboscidea', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '5', scientificName: 'Panthera tigris', authorship: '(Linnaeus, 1758)', commonName: 'Tiger', rank: 'species', family: 'Felidae', order: 'Carnivora', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '6', scientificName: 'Gorilla gorilla', authorship: '(Savage, 1847)', commonName: 'Western Gorilla', rank: 'species', family: 'Hominidae', order: 'Primates', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '7', scientificName: 'Pongo abelii', authorship: 'Lesson, 1827', commonName: 'Sumatran Orangutan', rank: 'species', family: 'Hominidae', order: 'Primates', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '8', scientificName: 'Chelonia mydas', authorship: '(Linnaeus, 1758)', commonName: 'Green Sea Turtle', rank: 'species', family: 'Cheloniidae', order: 'Testudines', class: 'Reptilia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '9', scientificName: 'Crocodylus porosus', authorship: 'Schneider, 1801', commonName: 'Saltwater Crocodile', rank: 'species', family: 'Crocodylidae', order: 'Crocodilia', class: 'Reptilia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '10', scientificName: 'Rhincodon typus', authorship: 'Smith, 1828', commonName: 'Whale Shark', rank: 'species', family: 'Rhincodontidae', order: 'Orectolobiformes', class: 'Chondrichthyes', kingdom: 'Animalia', pack: 'starter' },
-  { id: '11', scientificName: 'Danaus plexippus', authorship: '(Linnaeus, 1758)', commonName: 'Monarch Butterfly', rank: 'species', family: 'Nymphalidae', order: 'Lepidoptera', class: 'Insecta', kingdom: 'Animalia', pack: 'starter' },
-  { id: '12', scientificName: 'Sequoia sempervirens', authorship: '(D.Don) Endl.', commonName: 'Coast Redwood', rank: 'species', family: 'Cupressaceae', order: 'Pinales', class: 'Pinopsida', kingdom: 'Plantae', pack: 'starter' },
-  { id: '13', scientificName: 'Welwitschia mirabilis', authorship: 'Hook.f.', commonName: 'Welwitschia', rank: 'species', family: 'Welwitschiaceae', order: 'Gnetales', class: 'Gnetopsida', kingdom: 'Plantae', pack: 'starter' },
-  { id: '14', scientificName: 'Haliaeetus leucocephalus', authorship: '(Linnaeus, 1766)', commonName: 'Bald Eagle', rank: 'species', family: 'Accipitridae', order: 'Accipitriformes', class: 'Aves', kingdom: 'Animalia', pack: 'starter' },
-  { id: '15', scientificName: 'Canis lupus', authorship: 'Linnaeus, 1758', commonName: 'Gray Wolf', rank: 'species', family: 'Canidae', order: 'Carnivora', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '16', scientificName: 'Ailuropoda melanoleuca', authorship: '(David, 1869)', commonName: 'Giant Panda', rank: 'species', family: 'Ursidae', order: 'Carnivora', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '17', scientificName: 'Balaenoptera musculus', authorship: '(Linnaeus, 1758)', commonName: 'Blue Whale', rank: 'species', family: 'Balaenopteridae', order: 'Cetacea', class: 'Mammalia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '18', scientificName: 'Grus americana', authorship: '(Linnaeus, 1758)', commonName: 'Whooping Crane', rank: 'species', family: 'Gruidae', order: 'Gruiformes', class: 'Aves', kingdom: 'Animalia', pack: 'starter' },
-  { id: '19', scientificName: 'Rana temporaria', authorship: 'Linnaeus, 1758', commonName: 'Common Frog', rank: 'species', family: 'Ranidae', order: 'Anura', class: 'Amphibia', kingdom: 'Animalia', pack: 'starter' },
-  { id: '20', scientificName: 'Salamandra salamandra', authorship: '(Linnaeus, 1758)', commonName: 'Fire Salamander', rank: 'species', family: 'Salamandridae', order: 'Urodela', class: 'Amphibia', kingdom: 'Animalia', pack: 'starter' },
+const PHYLUM_GROUPS: PhylumGroup[] = [
+  {
+    phylum: 'Arthropoda',
+    displayName: 'Arthropoda',
+    packs: [
+      { packId: 'auto_animalia_arthropoda_insecta', name: 'Insecta', description: 'Insects: beetles, butterflies, flies, ants, and more.' },
+      { packId: 'auto_animalia_arthropoda_arachnida', name: 'Arachnida', description: 'Spiders, scorpions, mites, and ticks.' },
+      { packId: 'auto_animalia_arthropoda_malacostraca', name: 'Malacostraca', description: 'Crabs, lobsters, shrimps, and many crustaceans.' },
+      { packId: 'auto_animalia_arthropoda_ostracoda', name: 'Ostracoda', description: 'Seed shrimp and related micro-crustaceans.' },
+      { packId: 'auto_animalia_arthropoda_other', name: 'Other Arthropoda', description: 'All remaining arthropod classes not listed above.' }
+    ]
+  },
+  {
+    phylum: 'Mollusca',
+    displayName: 'Mollusca',
+    packs: [
+      { packId: 'auto_animalia_mollusca_gastropoda', name: 'Gastropoda', description: 'Snails, slugs, limpets, and related molluscs.' },
+      { packId: 'auto_animalia_mollusca_bivalvia', name: 'Bivalvia', description: 'Clams, mussels, oysters, and scallops.' },
+      { packId: 'auto_animalia_mollusca_other', name: 'Other Mollusca', description: 'Other mollusc groups not listed above.' }
+    ]
+  },
+  {
+    phylum: 'Chordata',
+    displayName: 'Chordata',
+    packs: [
+      { packId: 'auto_animalia_chordata_teleostei', name: 'Teleostei', description: 'Most bony fishes.' },
+      { packId: 'auto_animalia_chordata_aves', name: 'Aves', description: 'Birds.' },
+      { packId: 'auto_animalia_chordata_other', name: 'Other Chordata', description: 'Other chordate groups not listed above.' }
+    ]
+  },
+  {
+    phylum: 'Platyhelminthes',
+    displayName: 'Platyhelminthes',
+    packs: [
+      { packId: 'auto_animalia_platyhelminthes_other', name: 'Other Platyhelminthes', description: 'Flatworms and related groups.' }
+    ]
+  },
+  {
+    phylum: 'Cnidaria',
+    displayName: 'Cnidaria',
+    packs: [
+      { packId: 'auto_animalia_cnidaria_other', name: 'Other Cnidaria', description: 'Jellyfish, corals, sea anemones, and relatives.' }
+    ]
+  },
+  {
+    phylum: 'Nematoda',
+    displayName: 'Nematoda',
+    packs: [
+      { packId: 'auto_animalia_nematoda_other', name: 'Other Nematoda', description: 'Roundworms.' }
+    ]
+  },
+  {
+    phylum: 'Bryozoa',
+    displayName: 'Bryozoa',
+    packs: [
+      { packId: 'auto_animalia_bryozoa_other', name: 'Other Bryozoa', description: 'Moss animals (aquatic colonial invertebrates).' }
+    ]
+  },
+  {
+    phylum: 'Annelida',
+    displayName: 'Annelida',
+    packs: [
+      { packId: 'auto_animalia_annelida_other', name: 'Other Annelida', description: 'Segmented worms: earthworms, leeches, and relatives.' }
+    ]
+  },
+  {
+    phylum: 'Echinodermata',
+    displayName: 'Echinodermata',
+    packs: [
+      { packId: 'auto_animalia_echinodermata_other', name: 'Other Echinodermata', description: 'Sea stars, sea urchins, sea cucumbers, and relatives.' }
+    ]
+  },
+  {
+    phylum: 'Porifera',
+    displayName: 'Porifera',
+    packs: [
+      { packId: 'auto_animalia_porifera_other', name: 'Other Porifera', description: 'Sponges.' }
+    ]
+  },
+  {
+    phylum: 'Tracheophyta',
+    displayName: 'Tracheophyta (Plants)',
+    packs: [
+      { packId: 'auto_plantae_tracheophyta_magnoliopsida', name: 'Magnoliopsida', description: 'Flowering plants: many broadleaf plants.' },
+      { packId: 'auto_plantae_tracheophyta_liliopsida', name: 'Liliopsida', description: 'Monocots: grasses, orchids, palms, lilies.' },
+      { packId: 'auto_plantae_tracheophyta_other', name: 'Other Tracheophyta', description: 'Other vascular plant classes not listed above.' }
+    ]
+  },
+  {
+    phylum: 'Bryophyta',
+    displayName: 'Bryophyta (Plants)',
+    packs: [
+      { packId: 'auto_plantae_bryophyta_other', name: 'Other Bryophyta', description: 'Mosses and related non-vascular plants.' }
+    ]
+  },
+  {
+    phylum: 'Ascomycota',
+    displayName: 'Ascomycota (Fungi)',
+    packs: [
+      { packId: 'auto_fungi_ascomycota_dothideomycetes', name: 'Dothideomycetes', description: 'Large fungal class with many plant-associated fungi.' },
+      { packId: 'auto_fungi_ascomycota_sordariomycetes', name: 'Sordariomycetes', description: 'Fungal class including many molds and endophytes.' },
+      { packId: 'auto_fungi_ascomycota_other', name: 'Other Ascomycota', description: 'Other ascomycete classes not listed above.' }
+    ]
+  },
+  {
+    phylum: 'Basidiomycota',
+    displayName: 'Basidiomycota (Fungi)',
+    packs: [
+      { packId: 'auto_fungi_basidiomycota_agaricomycetes', name: 'Agaricomycetes', description: 'Mushrooms, bracket fungi, puffballs, and relatives.' },
+      { packId: 'auto_fungi_basidiomycota_other', name: 'Other Basidiomycota', description: 'Other basidiomycete classes not listed above.' }
+    ]
+  }
 ];
 
-export function SpeciesIndex({ selectedSpecies, onSelectSpecies, onCreateAssessment }: SpeciesIndexProps) {
+export function SpeciesIndex() {
+  const [installedPacks, setInstalledPacks] = useState<string[]>([]);
+  const [packSizes, setPackSizes] = useState<Map<string, number>>(new Map());
+  const [packSizesError, setPackSizesError] = useState(false);
+  const [syncingPackId, setSyncingPackId] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ taxonCount: 0, synonymCount: 0, isComplete: false });
+  const [showManageStorage, setShowManageStorage] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState<string>('all');
-  const [speciesData, setSpeciesData] = useState<Species[]>(starterPack);
-  const [downloadedPacks, setDownloadedPacks] = useState<string[]>(['starter']);
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [selectedPacksForSearch, setSelectedPacksForSearch] = useState<string[]>([]);
+  const [selectedSpecies, setSelectedSpecies] = useState<TaxonRecord | null>(null);
+  const [selectedSynonymName, setSelectedSynonymName] = useState<string | undefined>(undefined);
+  const [showSpeciesDetail, setShowSpeciesDetail] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [showTimeoutToast, setShowTimeoutToast] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [indexList, setIndexList] = useState<TaxonRecord[]>([]);
+  const [indexLoading, setIndexLoading] = useState(false);
 
-  const groups = [
-    { id: 'all', label: 'All', icon: '🌍' },
-    { id: 'mammalia', label: 'Mammals', icon: '🦁' },
-    { id: 'aves', label: 'Birds', icon: '🦅' },
-    { id: 'reptilia', label: 'Reptiles', icon: '🦎' },
-    { id: 'amphibia', label: 'Amphibians', icon: '🐸' },
-    { id: 'actinopterygii', label: 'Fishes', icon: '🐟' },
-    { id: 'insecta', label: 'Invertebrates', icon: '🦋' },
-    { id: 'plantae', label: 'Plants', icon: '🌿' },
-    { id: 'fungi', label: 'Fungi', icon: '🍄' },
-  ];
+  useEffect(() => {
+    loadInstalledPacks();
+    loadPackSizes();
+    loadIndexList();
+  }, []);
 
-  const packs = [
-    { id: 'starter', name: 'Core Starter Pack (Offline)', size: '2 MB', status: 'installed', lastUpdated: '2025-02-01' },
-    { id: 'birds', name: 'Birds Pack', size: '45 MB', status: 'available', lastUpdated: '2025-01-15' },
-    { id: 'mammals', name: 'Mammals Pack', size: '38 MB', status: 'available', lastUpdated: '2025-01-20' },
-    { id: 'plants', name: 'Plants Pack', size: '120 MB', status: 'available', lastUpdated: '2024-12-10' },
-  ];
+  useEffect(() => {
+    // Default search scope: all installed packs
+    setSelectedPacksForSearch(installedPacks);
+  }, [installedPacks]);
 
-  const filteredSpecies = speciesData.filter((species) => {
-    const matchesSearch = species.scientificName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (species.commonName?.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesGroup = selectedGroup === 'all' || species.class?.toLowerCase() === selectedGroup || species.kingdom.toLowerCase() === selectedGroup;
-    return matchesSearch && matchesGroup;
-  });
-
-  const handleDownloadPack = (packId: string) => {
-    // Simulate download
-    setDownloadedPacks([...downloadedPacks, packId]);
+  const loadInstalledPacks = async () => {
+    const packs = await taxonomyDb.getInstalledPacks();
+    setInstalledPacks(packs);
   };
 
-  const handleRemovePack = (packId: string) => {
-    setDownloadedPacks(downloadedPacks.filter(p => p !== packId));
+  const loadPackSizes = async () => {
+    try {
+      const packs = await taxonomyPackSync.listPacks();
+      const sizeMap = new Map<string, number>();
+      packs.forEach(pack => {
+        sizeMap.set(pack.pack_id, pack.taxa_count);
+      });
+      setPackSizes(sizeMap);
+      setPackSizesError(false);
+    } catch (error: any) {
+      console.error('Failed to load pack sizes:', error);
+      // Don't show error banner for timeout - just work without counts
+      if (!error.message?.includes('statement timeout')) {
+        setPackSizesError(true);
+      }
+      // UI will work fine without pack sizes, cards just won't show counts
+    }
   };
 
-  if (selectedSpecies) {
-    const species = speciesData.find(s => s.id === selectedSpecies);
-    if (!species) return null;
+  const loadIndexList = async () => {
+    setIndexLoading(true);
+    try {
+      const packs = await taxonomyDb.getInstalledPacks();
+      
+      if (packs.length === 0) {
+        setIndexList([]);
+        return;
+      }
 
-    return (
-      <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #0B0B0D 0%, #0F1013 100%)' }}>
-        {/* Header */}
-        <div className="sticky top-0 z-20 px-4 py-4 safe-area-top backdrop-blur-sm bg-black/60" style={{ borderBottom: '1px solid #242632' }}>
+      // Get first 30 taxa from all packs, sorted by scientific_name
+      const taxa = await taxonomyDb.taxon
+        .orderBy('scientific_name')
+        .limit(30)
+        .toArray();
+
+      setIndexList(taxa);
+    } catch (error) {
+      console.error('Index list error:', error);
+      setIndexList([]);
+    } finally {
+      setIndexLoading(false);
+    }
+  };
+
+  const handleDownloadPack = async (packId: string, packName: string, phylum: string) => {
+    setSyncingPackId(packId);
+    setSyncProgress({ taxonCount: 0, synonymCount: 0, isComplete: false });
+    setShowTimeoutToast(false);
+    setDownloadError(null);
+
+    try {
+      await taxonomyPackSync.downloadPack(packId, (progress) => {
+        if (progress.error === 'TIMEOUT_RETRY') {
+          if (!showTimeoutToast) {
+            setShowTimeoutToast(true);
+            setTimeout(() => setShowTimeoutToast(false), 4000);
+          }
+        }
+        setSyncProgress(progress);
+      });
+
+      await loadInstalledPacks();
+      showToastMessage(`${packName} downloaded`);
+    } catch (error: any) {
+      console.error('Download error:', error);
+      setDownloadError(error.message);
+    } finally {
+      setSyncingPackId(null);
+    }
+  };
+
+  const handleRemovePack = async (packId: string, packName: string) => {
+    try {
+      await taxonomyPackSync.removePack(packId);
+      await loadInstalledPacks();
+      showToastMessage(`${packName} removed`);
+    } catch (error) {
+      console.error('Remove error:', error);
+      showToastMessage('Failed to remove pack');
+    }
+  };
+
+  const handleSearch = useCallback(
+    async (query: string, packIds: string[]) => {
+      if (installedPacks.length === 0 || query.length < 2 || packIds.length === 0) {
+        setSearchResults([]);
+        return;
+      }
+
+      try {
+        const results = await taxonomySearch.search(query, packIds, 20);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Search error:', error);
+        setSearchResults([]);
+      }
+    },
+    [installedPacks]
+  );
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleSearch(searchQuery, selectedPacksForSearch);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedPacksForSearch, handleSearch]);
+
+  const handleSelectSpecies = (result: SearchResult) => {
+    setSelectedSpecies(result.taxon);
+    setSelectedSynonymName(result.synonymName);
+    setShowSpeciesDetail(true);
+  };
+
+  const handleUseInAssessment = () => {
+    if (!selectedSpecies) return;
+
+    // Store the selected taxon data
+    const selectedTaxon = {
+      id: selectedSpecies.id,
+      scientificName: selectedSpecies.scientific_name,
+      rank: selectedSpecies.rank,
+      kingdom: selectedSpecies.kingdom,
+      family: selectedSpecies.family,
+      genus: selectedSpecies.genus,
+      authorship: selectedSpecies.authorship,
+      packId: selectedSpecies.pack_id,
+      selectedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem('selectedTaxonForAssessment', JSON.stringify(selectedTaxon));
+    
+    // Close the species detail sheet
+    setShowSpeciesDetail(false);
+    
+    // Show toast
+    showToastMessage('Opening New Assessment...');
+    
+    // Wait a moment then trigger the New Assessment modal
+    setTimeout(() => {
+      const event = new CustomEvent('openNewAssessment');
+      window.dispatchEvent(event);
+    }, 300);
+  };
+
+  const handleCopyName = async () => {
+    if (selectedSpecies) {
+      try {
+        // Try modern Clipboard API first
+        await navigator.clipboard.writeText(selectedSpecies.scientific_name);
+        showToastMessage('Name copied');
+      } catch (err) {
+        // Fallback for browsers/contexts where Clipboard API is blocked
+        try {
+          // Create temporary textarea for fallback copy
+          const textarea = document.createElement('textarea');
+          textarea.value = selectedSpecies.scientific_name;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          showToastMessage('Name copied');
+        } catch (fallbackErr) {
+          // If both methods fail, just show the error
+          showToastMessage('Copy failed - please copy manually');
+          console.error('Copy failed:', err, fallbackErr);
+        }
+      }
+    }
+  };
+
+  const showToastMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
+  };
+
+  const togglePackInSearch = (packId: string) => {
+    if (selectedPacksForSearch.includes(packId)) {
+      setSelectedPacksForSearch(selectedPacksForSearch.filter(p => p !== packId));
+    } else {
+      setSelectedPacksForSearch([...selectedPacksForSearch, packId]);
+    }
+  };
+
+  const getStatusPillText = () => {
+    if (syncingPackId) return 'Syncing';
+    if (installedPacks.length > 0) return 'Ready';
+    return 'Not downloaded';
+  };
+
+  const getStatusPillColor = () => {
+    if (syncingPackId) return '#60A5FA';
+    if (installedPacks.length > 0) return '#6EE7B7';
+    return '#8E91A3';
+  };
+
+  const getPackLabel = (packId: string): string => {
+    for (const group of PHYLUM_GROUPS) {
+      const pack = group.packs.find(p => p.packId === packId);
+      if (pack) return pack.name;
+    }
+    return packId;
+  };
+
+  const getCurrentSyncingPackInfo = () => {
+    if (!syncingPackId) return null;
+    
+    for (const group of PHYLUM_GROUPS) {
+      const pack = group.packs.find(p => p.packId === syncingPackId);
+      if (pack) {
+        return { name: pack.name, phylum: group.displayName };
+      }
+    }
+    return null;
+  };
+
+  return (
+    <div className="space-y-4" style={{ paddingBottom: '140px' }}>
+      {/* Header with status pill */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold mb-1" style={{ color: '#FFFFFF' }}>
+            Species Index
+          </h2>
+          <p className="text-sm" style={{ color: '#C9CBD6' }}>
+            Catalogue of Life on this device
+          </p>
+        </div>
+        <span
+          className="px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0"
+          style={{ 
+            background: `${getStatusPillColor()}20`,
+            color: getStatusPillColor()
+          }}
+        >
+          {getStatusPillText()}
+        </span>
+      </div>
+
+      {/* Installed summary */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm" style={{ color: '#C9CBD6' }}>
+          Installed packs: <strong style={{ color: '#FFFFFF' }}>{installedPacks.length}</strong>
+        </p>
+        {installedPacks.length > 0 && (
           <button
-            onClick={() => onSelectSpecies(null)}
-            className="text-sm font-semibold flex items-center gap-2 mb-3"
+            onClick={() => setShowManageStorage(true)}
+            className="text-sm font-semibold flex items-center gap-1"
             style={{ color: '#D2110C' }}
           >
-            ← Back to Index
+            <Database className="w-4 h-4" />
+            Manage storage
           </button>
-          <h1 className="text-2xl font-bold mb-1" style={{ color: '#FFFFFF' }}>
-            <em>{species.scientificName}</em>
-          </h1>
-          {species.authorship && (
-            <p className="text-sm mb-2" style={{ color: '#8E91A3' }}>{species.authorship}</p>
-          )}
-          {species.commonName && (
-            <p className="text-base" style={{ color: '#C9CBD6' }}>{species.commonName}</p>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="px-4 py-6 space-y-4 content-safe-bottom">
-          {/* Taxonomy */}
-          <div className="rounded-xl p-4" style={{ background: '#14151A', border: '1px solid #242632' }}>
-            <h3 className="text-sm font-bold mb-3" style={{ color: '#FFFFFF' }}>Taxonomy</h3>
-            <div className="space-y-2">
-              {species.kingdom && <TaxonomyRow label="Kingdom" value={species.kingdom} />}
-              {species.class && <TaxonomyRow label="Class" value={species.class} />}
-              {species.order && <TaxonomyRow label="Order" value={species.order} />}
-              {species.family && <TaxonomyRow label="Family" value={species.family} />}
-              <TaxonomyRow label="Rank" value={species.rank} />
-            </div>
-          </div>
-
-          {/* Synonyms */}
-          {species.synonyms && species.synonyms.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: '#14151A', border: '1px solid #242632' }}>
-              <h3 className="text-sm font-bold mb-3" style={{ color: '#FFFFFF' }}>Synonyms</h3>
-              <div className="space-y-1">
-                {species.synonyms.map((syn, index) => (
-                  <p key={index} className="text-sm italic" style={{ color: '#8E91A3' }}>{syn}</p>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="space-y-3">
-            <button
-              onClick={() => onCreateAssessment(species.scientificName, species.commonName || '')}
-              className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all"
-              style={{
-                background: '#D2110C',
-                color: '#FFFFFF'
-              }}
-            >
-              Create Assessment
-            </button>
-            <button
-              className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all"
-              style={{
-                background: 'transparent',
-                border: '2px solid #242632',
-                color: '#FFFFFF'
-              }}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <Star className="w-5 h-5" />
-                Add to Favourites
-              </div>
-            </button>
-            <button
-              className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all"
-              style={{
-                background: 'transparent',
-                border: '2px solid #242632',
-                color: '#FFFFFF'
-              }}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="w-5 h-5" />
-                Attach Evidence
-              </div>
-            </button>
-          </div>
-
-          {/* Pack Info */}
-          <div className="rounded-lg p-3" style={{ background: 'rgba(96, 165, 250, 0.1)', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
-            <p className="text-xs" style={{ color: '#60A5FA' }}>
-              Source: {species.pack === 'starter' ? 'Core Starter Pack' : `${species.pack} Pack`}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Landing screen - index with search
-  return (
-    <div className="space-y-4">
-      <div className="mb-4">
-        <h2 className="text-lg font-bold mb-2" style={{ color: '#FFFFFF' }}>Species Index</h2>
-        <p className="text-sm" style={{ color: '#C9CBD6' }}>
-          Search scientific names, browse by group, and download packs for offline use.
-        </p>
+        )}
       </div>
 
-      {/* Global Search */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: '#8E91A3' }} />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search scientific or common name..."
-          className="w-full pl-12 pr-4 py-3 rounded-lg"
-          style={{ background: '#14151A', border: '1px solid #242632', color: '#FFFFFF' }}
-        />
-      </div>
-
-      {/* Browse by Major Group */}
-      <div>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: '#C9CBD6' }}>Browse by Group</h3>
-        <div className="flex flex-wrap gap-2">
-          {groups.map((group) => (
-            <button
-              key={group.id}
-              onClick={() => setSelectedGroup(group.id)}
-              className="px-3 py-2 rounded-lg text-sm font-semibold transition-all"
-              style={{
-                background: selectedGroup === group.id ? '#D2110C' : '#14151A',
-                border: `1px solid ${selectedGroup === group.id ? '#D2110C' : '#242632'}`,
-                color: selectedGroup === group.id ? '#FFFFFF' : '#C9CBD6'
-              }}
-            >
-              <span className="mr-1">{group.icon}</span>
-              {group.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Search Results */}
-      {searchQuery && (
-        <div>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: '#C9CBD6' }}>
-            {filteredSpecies.length} result{filteredSpecies.length !== 1 ? 's' : ''}
+      {/* Progress card (pinned during sync) */}
+      {syncingPackId && getCurrentSyncingPackInfo() && (
+        <div
+          className="rounded-[18px] card-shadow p-4"
+          style={{ background: '#14151A', border: '1px solid #242632' }}
+        >
+          <h3 className="font-semibold mb-1" style={{ color: '#FFFFFF' }}>
+            Downloading pack
           </h3>
-          <div className="space-y-2">
-            {filteredSpecies.slice(0, 20).map((species) => (
-              <button
-                key={species.id}
-                onClick={() => onSelectSpecies(species.id)}
-                className="w-full rounded-xl p-4 text-left transition-all active:scale-98"
-                style={{ background: '#14151A', border: '1px solid #242632' }}
-              >
-                <p className="font-bold mb-1" style={{ color: '#FFFFFF' }}>
-                  <em>{species.scientificName}</em>
-                </p>
-                <div className="flex items-center gap-2">
-                  {species.family && (
-                    <span className="text-xs" style={{ color: '#8E91A3' }}>{species.family}</span>
-                  )}
-                  {species.commonName && (
-                    <span className="text-xs" style={{ color: '#C9CBD6' }}>• {species.commonName}</span>
-                  )}
-                </div>
-              </button>
-            ))}
+          <p className="text-sm mb-3" style={{ color: '#C9CBD6' }}>
+            {getCurrentSyncingPackInfo()!.name} under {getCurrentSyncingPackInfo()!.phylum}
+          </p>
+          <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: '#1A1C22' }}>
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                width: '100%',
+                background: '#D2110C',
+                animation: 'pulse 2s ease-in-out infinite'
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span style={{ color: '#C9CBD6' }}>
+              Taxa downloaded: <strong style={{ color: '#FFFFFF' }}>{syncProgress.taxonCount.toLocaleString()}</strong>
+            </span>
+            <span style={{ color: '#C9CBD6' }}>
+              Synonyms downloaded: <strong style={{ color: '#FFFFFF' }}>{syncProgress.synonymCount.toLocaleString()}</strong>
+            </span>
           </div>
         </div>
       )}
 
-      {/* Index Packs */}
-      {!searchQuery && (
-        <div>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: '#C9CBD6' }}>Index Packs</h3>
-          <div className="space-y-3">
-            {packs.map((pack) => {
-              const isDownloaded = downloadedPacks.includes(pack.id);
-              return (
-                <div
-                  key={pack.id}
-                  className="rounded-xl p-4"
-                  style={{ background: '#14151A', border: '1px solid #242632' }}
+      {/* Pack sizes error banner */}
+      {packSizesError && (
+        <div
+          className="rounded-lg p-3"
+          style={{ background: 'rgba(210, 17, 12, 0.15)', border: '1px solid rgba(210, 17, 12, 0.3)' }}
+        >
+          <p className="text-sm" style={{ color: '#D2110C' }}>
+            Could not load pack sizes.
+          </p>
+        </div>
+      )}
+
+      {/* Download error banner */}
+      {downloadError && !syncingPackId && (
+        <div
+          className="rounded-lg p-3 flex items-start justify-between gap-3"
+          style={{ background: 'rgba(210, 17, 12, 0.15)', border: '1px solid rgba(210, 17, 12, 0.3)' }}
+        >
+          <p className="text-sm flex-1" style={{ color: '#D2110C' }}>
+            Download failed: {downloadError}
+          </p>
+          <button
+            onClick={() => setDownloadError(null)}
+            className="flex-shrink-0"
+          >
+            <X className="w-4 h-4" style={{ color: '#D2110C' }} />
+          </button>
+        </div>
+      )}
+
+      {/* Search section (only if packs installed) */}
+      {installedPacks.length > 0 && (
+        <>
+          <div className="relative">
+            <SearchIcon
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5"
+              style={{ color: '#8E91A3' }}
+            />
+            <input
+              type="text"
+              placeholder="Search species"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 rounded-xl"
+              style={{
+                background: '#14151A',
+                border: '1px solid #242632',
+                color: '#FFFFFF'
+              }}
+            />
+          </div>
+
+          {/* Scope chips */}
+          {searchQuery.length >= 2 && (
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+              {installedPacks.map((packId) => (
+                <button
+                  key={packId}
+                  onClick={() => togglePackInSearch(packId)}
+                  className="px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all"
+                  style={{
+                    background: selectedPacksForSearch.includes(packId) ? '#D2110C' : '#1A1C22',
+                    color: selectedPacksForSearch.includes(packId) ? '#FFFFFF' : '#C9CBD6',
+                    border: `1px solid ${selectedPacksForSearch.includes(packId) ? '#D2110C' : '#242632'}`
+                  }}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h4 className="font-bold mb-1" style={{ color: '#FFFFFF' }}>{pack.name}</h4>
-                      <p className="text-xs" style={{ color: '#8E91A3' }}>
-                        {pack.size} • Updated {new Date(pack.lastUpdated).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {isDownloaded && (
-                      <div className="flex items-center gap-1 px-2 py-1 rounded" style={{ background: 'rgba(16, 185, 129, 0.15)' }}>
-                        <Check className="w-3 h-3" style={{ color: '#10B981' }} />
-                        <span className="text-xs font-semibold" style={{ color: '#10B981' }}>Downloaded</span>
+                  {getPackLabel(packId)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Search results */}
+          {searchQuery.length >= 2 && selectedPacksForSearch.length > 0 && (
+            <div className="space-y-2">
+              {searchResults.length > 0 ? (
+                searchResults.map((result, index) => (
+                  <button
+                    key={`${result.taxon.id}-${index}`}
+                    onClick={() => handleSelectSpecies(result)}
+                    className="w-full rounded-[18px] card-shadow p-4 text-left transition-all active:scale-98"
+                    style={{ background: '#14151A', border: '1px solid #242632' }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold truncate" style={{ color: '#FFFFFF' }}>
+                          {result.matchType === 'synonym' && result.synonymName
+                            ? result.synonymName
+                            : result.taxon.scientific_name}
+                        </p>
+                        <p className="text-sm truncate" style={{ color: '#C9CBD6' }}>
+                          {result.taxon.rank} • {result.taxon.kingdom || 'Unknown'}
+                          {result.taxon.authorship && ` • ${result.taxon.authorship}`}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    {!isDownloaded ? (
-                      <button
-                        onClick={() => handleDownloadPack(pack.id)}
-                        className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all"
+                      <span
+                        className="px-2 py-1 rounded text-xs font-semibold flex-shrink-0"
                         style={{
-                          background: '#D2110C',
-                          color: '#FFFFFF'
+                          background: result.matchType === 'accepted' ? 'rgba(110, 231, 183, 0.15)' : 'rgba(96, 165, 250, 0.15)',
+                          color: result.matchType === 'accepted' ? '#6EE7B7' : '#60A5FA'
                         }}
                       >
-                        <div className="flex items-center justify-center gap-2">
-                          <Download className="w-4 h-4" />
-                          Download
-                        </div>
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all"
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #242632',
-                            color: '#FFFFFF'
-                          }}
-                        >
-                          Update
-                        </button>
-                        <button
-                          onClick={() => handleRemovePack(pack.id)}
-                          className="flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all"
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #242632',
-                            color: '#FFFFFF'
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                  </div>
+                        {result.matchType === 'accepted' ? 'Accepted' : 'Synonym'}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm" style={{ color: '#8E91A3' }}>
+                    No results found
+                  </p>
                 </div>
-              );
-            })}
+              )}
+            </div>
+          )}
+        </>
+      )}
 
-            {/* Custom Import */}
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="w-full rounded-xl p-4 transition-all"
-              style={{ background: '#14151A', border: '2px dashed #242632' }}
-            >
-              <div className="flex items-center justify-center gap-3">
-                <Upload className="w-5 h-5" style={{ color: '#D2110C' }} />
-                <div className="text-left">
-                  <p className="font-bold" style={{ color: '#FFFFFF' }}>Custom Import (CSV)</p>
-                  <p className="text-xs" style={{ color: '#8E91A3' }}>Import regional checklists</p>
-                </div>
-              </div>
-            </button>
+      {/* Packs section */}
+      <div className="space-y-6 mt-6">
+        {PHYLUM_GROUPS.map((group) => (
+          <div key={group.phylum}>
+            <h3 className="text-lg font-bold mb-3" style={{ color: '#FFFFFF' }}>
+              {group.displayName}
+            </h3>
+            <div className="space-y-3">
+              {group.packs.map((pack) => (
+                <PackCard
+                  key={pack.packId}
+                  packId={pack.packId}
+                  name={pack.name}
+                  description={pack.description}
+                  taxaCount={packSizes.get(pack.packId)}
+                  isInstalled={installedPacks.includes(pack.packId)}
+                  isSyncing={syncingPackId === pack.packId}
+                  isAnySyncing={!!syncingPackId}
+                  phylum={group.displayName}
+                  onDownload={() => handleDownloadPack(pack.packId, pack.name, group.displayName)}
+                />
+              ))}
+            </div>
           </div>
+        ))}
+      </div>
+
+      {/* Manage Storage Modal */}
+      {showManageStorage && (
+        <ManageStorageModal
+          installedPacks={installedPacks}
+          getPackLabel={getPackLabel}
+          onRemove={handleRemovePack}
+          onClose={() => setShowManageStorage(false)}
+        />
+      )}
+
+      {/* Species Detail Bottom Sheet */}
+      {showSpeciesDetail && selectedSpecies && (
+        <SpeciesDetailSheet
+          species={selectedSpecies}
+          synonymName={selectedSynonymName}
+          onClose={() => setShowSpeciesDetail(false)}
+          onUseInAssessment={handleUseInAssessment}
+          onCopyName={handleCopyName}
+        />
+      )}
+
+      {/* Toast */}
+      {showToast && (
+        <div
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-xl shadow-2xl animate-slide-up flex items-center gap-2"
+          style={{ background: '#1A1C22', border: '1px solid #242632' }}
+        >
+          <Check className="w-4 h-4" style={{ color: '#6EE7B7' }} />
+          <p className="text-sm font-semibold" style={{ color: '#FFFFFF' }}>
+            {toastMessage}
+          </p>
         </div>
       )}
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="rounded-[22px] card-shadow-raised max-w-md w-full p-6" style={{ background: '#1A1C22' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold" style={{ color: '#FFFFFF' }}>Import CSV</h2>
-              <button onClick={() => setShowImportModal(false)}>
-                <X className="w-5 h-5" style={{ color: '#8E91A3' }} />
-              </button>
-            </div>
-            <p className="text-sm mb-4" style={{ color: '#C9CBD6' }}>
-              Upload a CSV file with your regional checklist. Required columns: scientificName. Optional: commonName, family, order, class, authorship, synonyms.
-            </p>
-            <button
-              className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all mb-3"
-              style={{
-                background: '#D2110C',
-                color: '#FFFFFF'
-              }}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <Upload className="w-5 h-5" />
-                Choose File
-              </div>
-            </button>
-            <button
-              onClick={() => setShowImportModal(false)}
-              className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all"
-              style={{
-                background: 'transparent',
-                border: '2px solid #242632',
-                color: '#FFFFFF'
-              }}
-            >
-              Cancel
-            </button>
-          </div>
+      {/* Timeout Toast */}
+      {showTimeoutToast && (
+        <div
+          className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-xl shadow-2xl animate-slide-down"
+          style={{ background: '#1A1C22', border: '1px solid #60A5FA' }}
+        >
+          <p className="text-sm font-semibold" style={{ color: '#60A5FA' }}>
+            Network slow — switching to smaller chunks
+          </p>
         </div>
       )}
     </div>
   );
 }
 
-function TaxonomyRow({ label, value }: { label: string; value: string }) {
+interface PackCardProps {
+  packId: string;
+  name: string;
+  description: string;
+  taxaCount?: number;
+  isInstalled: boolean;
+  isSyncing: boolean;
+  isAnySyncing: boolean;
+  phylum: string;
+  onDownload: () => void;
+}
+
+function PackCard({ packId, name, description, taxaCount, isInstalled, isSyncing, isAnySyncing, phylum, onDownload }: PackCardProps) {
+  const getButtonText = () => {
+    if (isSyncing) return 'Downloading…';
+    if (isInstalled) return 'Update';
+    return 'Download';
+  };
+
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs font-semibold" style={{ color: '#8E91A3' }}>{label}</span>
-      <span className="text-sm" style={{ color: '#C9CBD6' }}>{value}</span>
+    <div
+      className="rounded-[18px] card-shadow p-4"
+      style={{ 
+        background: '#14151A', 
+        border: isInstalled ? '1px solid #34D399' : '1px solid #242632',
+        borderLeft: isInstalled ? '3px solid #34D399' : '1px solid #242632'
+      }}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <h4 className="font-bold" style={{ color: '#FFFFFF' }}>
+              {name}
+            </h4>
+            {isInstalled && (
+              <span
+                className="px-2 py-0.5 rounded text-xs font-semibold"
+                style={{ background: 'rgba(52, 211, 153, 0.15)', color: '#34D399' }}
+              >
+                Installed
+              </span>
+            )}
+          </div>
+          <p className="text-sm mb-2" style={{ color: '#C9CBD6' }}>
+            {description}
+          </p>
+          {taxaCount !== undefined && (
+            <p className="text-xs" style={{ color: '#8E91A3' }}>
+              Taxa in pack: {taxaCount.toLocaleString()}
+            </p>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={onDownload}
+        disabled={isSyncing || (isAnySyncing && !isSyncing)}
+        className="w-full btn-primary py-2.5 flex items-center justify-center gap-2"
+        style={{
+          opacity: (isSyncing || (isAnySyncing && !isSyncing)) ? 0.5 : 1,
+          cursor: (isSyncing || (isAnySyncing && !isSyncing)) ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {isSyncing ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <Download className="w-4 h-4" />
+        )}
+        {getButtonText()}
+      </button>
+    </div>
+  );
+}
+
+interface ManageStorageModalProps {
+  installedPacks: string[];
+  getPackLabel: (packId: string) => string;
+  onRemove: (packId: string, packName: string) => void;
+  onClose: () => void;
+}
+
+function ManageStorageModal({ installedPacks, getPackLabel, onRemove, onClose }: ManageStorageModalProps) {
+  const [removingPackId, setRemovingPackId] = useState<string | null>(null);
+
+  const handleRemove = async (packId: string) => {
+    setRemovingPackId(packId);
+    await onRemove(packId, getPackLabel(packId));
+    setRemovingPackId(null);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div
+        className="rounded-[22px] card-shadow-raised max-w-md w-full max-h-[80vh] flex flex-col animate-slide-up"
+        style={{ background: '#1A1C22' }}
+      >
+        <div className="px-6 py-4 border-b" style={{ borderColor: '#242632' }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold" style={{ color: '#FFFFFF' }}>
+              Manage Storage
+            </h2>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all"
+              style={{ background: '#14151A' }}
+            >
+              <X className="w-5 h-5" style={{ color: '#C9CBD6' }} />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto flex-1">
+          {installedPacks.length === 0 ? (
+            <p className="text-center py-8" style={{ color: '#8E91A3' }}>
+              No packs installed
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {installedPacks.map((packId) => (
+                <div
+                  key={packId}
+                  className="rounded-xl p-4 flex items-center justify-between gap-3"
+                  style={{ background: '#14151A', border: '1px solid #242632' }}
+                >
+                  <p className="font-semibold flex-1" style={{ color: '#FFFFFF' }}>
+                    {getPackLabel(packId)}
+                  </p>
+                  <button
+                    onClick={() => handleRemove(packId)}
+                    disabled={removingPackId === packId}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #D2110C',
+                      color: '#D2110C',
+                      opacity: removingPackId === packId ? 0.5 : 1
+                    }}
+                  >
+                    {removingPackId === packId ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t" style={{ borderColor: '#242632' }}>
+          <button onClick={onClose} className="w-full btn-secondary py-3">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SpeciesDetailSheetProps {
+  species: TaxonRecord;
+  synonymName?: string;
+  onClose: () => void;
+  onUseInAssessment: () => void;
+  onCopyName: () => void;
+}
+
+function SpeciesDetailSheet({ species, synonymName, onClose, onUseInAssessment, onCopyName }: SpeciesDetailSheetProps) {
+  const lineageParts = [
+    species.kingdom && `Kingdom → ${species.kingdom}`,
+    species.phylum && `Phylum → ${species.phylum}`,
+    species.class && `Class → ${species.class}`,
+    species.order && `Order → ${species.order}`,
+    species.family && `Family → ${species.family}`,
+    species.genus && `Genus → ${species.genus}`
+  ].filter(Boolean);
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end z-50 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl mx-auto rounded-t-[22px] card-shadow-raised animate-slide-up"
+        style={{ background: '#1A1C22', maxHeight: '85vh' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b" style={{ borderColor: '#242632' }}>
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-bold" style={{ color: '#FFFFFF' }}>
+                {species.scientific_name}
+              </h2>
+              <p className="text-sm" style={{ color: '#C9CBD6' }}>
+                {species.authorship ? `${species.authorship} • ` : ''}{species.rank}
+              </p>
+              {synonymName && (
+                <p className="text-sm mt-1" style={{ color: '#60A5FA' }}>
+                  Synonym: {synonymName}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0"
+              style={{ background: '#14151A' }}
+            >
+              <X className="w-5 h-5" style={{ color: '#C9CBD6' }} />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {species.kingdom && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(110, 231, 183, 0.15)', color: '#6EE7B7' }}
+              >
+                {species.kingdom}
+              </span>
+            )}
+            {species.phylum && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(96, 165, 250, 0.15)', color: '#60A5FA' }}
+              >
+                {species.phylum}
+              </span>
+            )}
+            {species.class && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(167, 139, 250, 0.15)', color: '#A78BFA' }}
+              >
+                {species.class}
+              </span>
+            )}
+            {species.order && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(251, 191, 36, 0.15)', color: '#FBBF24' }}
+              >
+                {species.order}
+              </span>
+            )}
+            {species.family && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(248, 113, 113, 0.15)', color: '#F87171' }}
+              >
+                {species.family}
+              </span>
+            )}
+            {species.genus && (
+              <span
+                className="px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: 'rgba(156, 163, 175, 0.15)', color: '#9CA3AF' }}
+              >
+                {species.genus}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 220px)' }}>
+          {lineageParts.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold mb-2" style={{ color: '#C9CBD6' }}>
+                Lineage
+              </h3>
+              <div className="space-y-1">
+                {lineageParts.map((part, index) => (
+                  <p key={index} className="text-sm" style={{ color: '#FFFFFF' }}>
+                    {part}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t space-y-3" style={{ borderColor: '#242632' }}>
+          <button onClick={onUseInAssessment} className="w-full btn-primary py-3">
+            Use in assessment
+          </button>
+          <button
+            onClick={onCopyName}
+            className="w-full py-3 rounded-xl font-semibold transition-all"
+            style={{ background: 'transparent', border: '1px solid #242632', color: '#C9CBD6' }}
+          >
+            <Copy className="w-4 h-4 inline mr-2" />
+            Copy name
+          </button>
+          <p className="text-xs text-center pt-2" style={{ color: '#8E91A3' }}>
+            Taxonomy source: Catalogue of Life. IUCN SIS taxonomy may differ.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

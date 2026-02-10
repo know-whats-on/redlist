@@ -158,6 +158,16 @@ body, p, div {
   background: #2F3240;
 }
 
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Ensure inputs don't zoom on iOS */
 input,
 select,
@@ -381,14 +391,3 @@ input[type="submit"] {
     border-width: 2px;
   }
 }
-
-/* Hide scrollbar for overflow-x-auto */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Global focus */

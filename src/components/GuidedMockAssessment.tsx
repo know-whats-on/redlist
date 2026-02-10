@@ -4,9 +4,10 @@ import { X, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react';
 interface GuidedMockAssessmentProps {
   onComplete: () => void;
   onClose: () => void;
+  onSkip?: () => void; // Optional: called when user clicks "Skip for now"
 }
 
-export function GuidedMockAssessment({ onComplete, onClose }: GuidedMockAssessmentProps) {
+export function GuidedMockAssessment({ onComplete, onClose, onSkip }: GuidedMockAssessmentProps) {
   const [currentScreen, setCurrentScreen] = useState(0);
   const [showIntro, setShowIntro] = useState(true);
 
@@ -182,7 +183,7 @@ export function GuidedMockAssessment({ onComplete, onClose }: GuidedMockAssessme
                 <ChevronRight className="w-5 h-5" />
               </button>
               <button
-                onClick={onClose}
+                onClick={onSkip || onClose}
                 className="w-full py-3 px-4 rounded-xl text-base font-semibold transition-all"
                 style={{
                   background: 'transparent',

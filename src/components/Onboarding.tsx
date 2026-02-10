@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Check, Shield, Map, Award } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { GuidedMockAssessment } from './GuidedMockAssessment';
@@ -241,6 +241,42 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 }
 
 function OnboardingStep1({ name, setName, email, setEmail, onNext }: { name: string; setName: (e: string) => void; email: string; setEmail: (e: string) => void; onNext: () => void }) {
+  const [animatedCount, setAnimatedCount] = useState(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
+
+  useEffect(() => {
+    // Wait 2 seconds, then animate from 0 to 908,434 over 1.5 seconds
+    const startDelay = setTimeout(() => {
+      if (hasAnimated) return; // Only animate once
+      
+      const targetCount = 908434;
+      const duration = 1500; // 1.5 seconds
+      const startTime = Date.now();
+      
+      const animateCounter = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function for smooth animation (ease-out)
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentCount = Math.floor(easeOut * targetCount);
+        
+        setAnimatedCount(currentCount);
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateCounter);
+        } else {
+          setAnimatedCount(targetCount); // Ensure we end exactly on target
+          setHasAnimated(true);
+        }
+      };
+      
+      requestAnimationFrame(animateCounter);
+    }, 2000); // Wait 2 seconds before starting
+    
+    return () => clearTimeout(startDelay);
+  }, [hasAnimated]);
+
   return (
     <div className="h-full flex flex-col overflow-hidden relative">
       {/* Fixed Background Image - Does NOT scroll */}
@@ -257,11 +293,28 @@ function OnboardingStep1({ name, setName, email, setEmail, onNext }: { name: str
       <div className="flex-1 overflow-y-auto relative z-10" style={{ paddingBottom: '140px' }}>
         <div className="px-6 pt-12 pb-8">
           <div className="w-full max-w-md mx-auto space-y-6 mt-12">
-            {/* Title */}
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-3" style={{ color: '#FFFFFF' }}>
-                Welcome to RedList Buddy
-              </h2>
+            {/* 3-Line Hero Copy (Centre-Aligned) */}
+            <div className="text-center mb-10 space-y-3">
+              {/* Line 1: Small, semibold */}
+              <p className="text-sm font-semibold" style={{ color: '#C9CBD6' }}>
+                Enabling Assessment of
+              </p>
+              
+              {/* Line 2: Very large, bold, animated counter with subtle glow */}
+              <p 
+                className="text-6xl font-bold tracking-tight"
+                style={{ 
+                  color: '#FFFFFF',
+                  textShadow: '0 0 30px rgba(255, 255, 255, 0.15), 0 2px 8px rgba(0, 0, 0, 0.5)'
+                }}
+              >
+                {animatedCount.toLocaleString()}
+              </p>
+              
+              {/* Line 3: Small/medium */}
+              <p className="text-base" style={{ color: '#C9CBD6' }}>
+                Species on this Planet
+              </p>
             </div>
 
             {/* Name Input */}
@@ -478,6 +531,11 @@ function OnboardingStep3({ mockAssessmentComplete, onComplete, onFinish, onBack 
           onFinish();
         }}
         onClose={() => setShowGuidedMock(false)}
+        onSkip={() => {
+          setShowGuidedMock(false);
+          onComplete();
+          onFinish();
+        }}
       />
     );
   }

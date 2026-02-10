@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronRight, Clock } from 'lucide-react';
+import { Plus, ChevronRight, Clock, CheckCircle, AlertCircle, XCircle, FileText } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { AssessmentWizard } from './AssessmentWizard';
+import { taxonomyDb, TaxonRecord } from '../lib/taxonomyDb';
 import { SwipeableAssessmentCard } from './SwipeableAssessmentCard';
 import { UndoToast } from './UndoToast';
 
@@ -385,6 +387,89 @@ interface NewAssessmentModalProps {
 function NewAssessmentModal({ onClose, onCreate }: NewAssessmentModalProps) {
   const [taxonName, setTaxonName] = useState('');
   const [scientificName, setScientificName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<TaxonRecord[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedTaxonId, setSelectedTaxonId] = useState<string | null>(null);
+  const [hasDownloadedPacks, setHasDownloadedPacks] = useState(false);
+  const [isLinked, setIsLinked] = useState(false);
+  const commonNameInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    checkDownloadedPacks();
+    
+    // Check for prefilled taxon from Species Index
+    const prefilledJson = localStorage.getItem('selectedTaxonForAssessment');
+    if (prefilledJson) {
+      try {
+        const prefilled = JSON.parse(prefilledJson);
+        setScientificName(prefilled.scientificName || '');
+        setSearchQuery(prefilled.scientificName || '');
+        setSelectedTaxonId(prefilled.id || null);
+        setIsLinked(true);
+        
+        // Clear the prefill data
+        localStorage.removeItem('selectedTaxonForAssessment');
+        
+        // Focus common name input after a short delay
+        setTimeout(() => {
+          commonNameInputRef.current?.focus();
+        }, 100);
+      } catch (error) {
+        console.error('Failed to parse prefilled taxon:', error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchQuery.length >= 2) {
+      performSearch();
+    } else {
+      setSearchResults([]);
+      setShowSuggestions(false);
+    }
+  }, [searchQuery]);
+
+  const checkDownloadedPacks = async () => {
+    const packs = await taxonomyDb.getInstalledPacks();
+    setHasDownloadedPacks(packs.length > 0);
+  };
+
+  const performSearch = async () => {
+    try {
+      // Search across all downloaded packs
+      const taxa = await taxonomyDb.taxon
+        .where('scientific_name')
+        .startsWithIgnoreCase(searchQuery)
+        .limit(8)
+        .toArray();
+
+      setSearchResults(taxa);
+      setShowSuggestions(taxa.length > 0);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    }
+  };
+
+  const handleSelectTaxon = (taxon: TaxonRecord) => {
+    setScientificName(taxon.scientific_name);
+    setSearchQuery(taxon.scientific_name);
+    setSelectedTaxonId(taxon.id);
+    setIsLinked(true);
+    setShowSuggestions(false);
+  };
+
+  const handleScientificNameChange = (value: string) => {
+    setSearchQuery(value);
+    setScientificName(value);
+    
+    // Clear selection and linked status when manually typing
+    if (selectedTaxonId) {
+      setSelectedTaxonId(null);
+      setIsLinked(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -415,18 +500,22 @@ function NewAssessmentModal({ onClose, onCreate }: NewAssessmentModalProps) {
                 color: '#FFFFFF'
               }}
               required
+              ref={commonNameInputRef}
             />
           </div>
-          <div>
+          <div className="relative">
             <label htmlFor="scientificName" className="block text-sm font-semibold mb-2" style={{ color: '#C9CBD6' }}>
               Scientific Name
             </label>
             <input
               type="text"
               id="scientificName"
-              value={scientificName}
-              onChange={(e) => setScientificName(e.target.value)}
-              placeholder="e.g., Sialia currucoides"
+              value={searchQuery}
+              onChange={(e) => handleScientificNameChange(e.target.value)}
+              onFocus={() => {
+                if (searchResults.length > 0) setShowSuggestions(true);
+              }}
+              placeholder={hasDownloadedPacks ? "Start typing to search Species Index" : "e.g., Sialia currucoides"}
               className="w-full px-4 py-3 rounded-lg italic transition-all"
               style={{ 
                 background: '#14151A',
@@ -435,6 +524,63 @@ function NewAssessmentModal({ onClose, onCreate }: NewAssessmentModalProps) {
               }}
               required
             />
+            
+            {/* No packs downloaded hint */}
+            {!hasDownloadedPacks && searchQuery.length === 0 && (
+              <p className="text-xs mt-2" style={{ color: '#8E91A3' }}>
+                Download a taxonomy pack in Library → Species Index to enable search.
+              </p>
+            )}
+            
+            {/* Matched in Species Index hint */}
+            {selectedTaxonId && (
+              <p className="text-xs mt-2" style={{ color: '#6EE7B7' }}>
+                ✓ Matched in Species Index
+              </p>
+            )}
+            
+            {/* No match hint */}
+            {!selectedTaxonId && searchQuery.length >= 2 && searchResults.length === 0 && (
+              <p className="text-xs mt-2" style={{ color: '#8E91A3' }}>
+                No match found. You can continue with manual entry.
+              </p>
+            )}
+
+            {/* Suggestions dropdown */}
+            {showSuggestions && searchResults.length > 0 && (
+              <div 
+                className="absolute z-10 w-full mt-1 rounded-lg overflow-hidden" 
+                style={{ background: '#14151A', border: '1px solid #242632', maxHeight: '240px', overflowY: 'auto' }}
+              >
+                {searchResults.map((taxon, index) => (
+                  <button
+                    key={taxon.id}
+                    type="button"
+                    onClick={() => handleSelectTaxon(taxon)}
+                    className="w-full px-4 py-3 text-left transition-all hover:bg-white/5"
+                    style={{ 
+                      borderBottom: index < searchResults.length - 1 ? '1px solid #242632' : 'none'
+                    }}
+                  >
+                    <p className="font-semibold italic" style={{ color: '#FFFFFF' }}>
+                      {taxon.scientific_name}
+                    </p>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <p className="text-xs" style={{ color: '#C9CBD6' }}>
+                        {taxon.rank} • {taxon.kingdom || 'Unknown'}
+                        {taxon.authorship && ` • ${taxon.authorship}`}
+                      </p>
+                      <span
+                        className="px-2 py-0.5 rounded text-xs font-semibold"
+                        style={{ background: 'rgba(52, 211, 153, 0.15)', color: '#34D399' }}
+                      >
+                        Accepted
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex gap-3 mt-6">
             <button
